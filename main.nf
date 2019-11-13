@@ -23,7 +23,7 @@ input:
 set file('read_dir'), dir, name from read_ch
 
 output:
-set file('Basecalled.fastq'), dir, name into base_ch
+set file('params.outsuffix'), dir, name into base_ch
 
 script:
 """
@@ -40,7 +40,7 @@ ln -s pass/fastq_runid_*.fastq Basecalled.fastq
 }
 
 
-process chop {
+process demultiplex_trim {
 tag "${dir}/${name}"
 publishDir "${dir}/${params.outsuffix}${name}", mode: 'copy'
 stageInMode ( ( params.basecalled && workflow.profile == 'zeus' ) ? 'copy' : 'symlink' )
@@ -49,23 +49,26 @@ input:
 set file('Basecalled.fastq'), dir, name from base_ch.mix(basefile_ch)
 
 output:
-set file('Chopped.fastq'), dir, name into chop_ch,chop2_ch
+set file('demultiplexed'), dir, name into trimmed_ch,trimmed2_ch
 
 script:
 """
-porechop \
-  -i Basecalled.fastq -o Chopped.fastq \
-  --discard_middle -t ${task.cpus}
+qcat \
+  -f Basecalled.fastq -b demultiplexed  \
+  --trim -t ${task.cpus}
 """
 }
 
+return
+
+//trimmed_ch.view()
 
 process assemble{
 tag "${dir}/${name}"
 publishDir "${dir}/${params.outsuffix}${name}", mode: 'copy'
 
 input:
-set file('Chopped.fastq'), dir, name from chop_ch
+set file('barcode$$.fastq'), dir, name from trimmed_ch
 
 output:
 set file('Denovo_subset.fa'), dir, name into denovo_ch,denovo2_ch
@@ -73,7 +76,7 @@ set file('Denovo_subset.fa'), dir, name into denovo_ch,denovo2_ch
 script:
 """
 mini_assemble \
-  -i Chopped.fastq -p denovo -o denovo \
+  -i demultiplex_trim.fastq -p denovo -o denovo \
   -c -t ${task.cpus}
 
 awk -v min_len_contig=${params.min_len_contig} \
@@ -182,7 +185,7 @@ tag "${dir}/${name}_${seqid}"
 publishDir "${dir}/${params.outsuffix}${name}", mode: 'copy', saveAs: { filename -> "Aligned_${seqid}.bam" }
 
 input:
-set file('Chopped.fastq'), dir, name, file('Refseq.fasta'), seqid from chop2_ch.combine( seq_ch )
+set file('trimmed.fastq'), dir, name, file('Refseq.fasta'), seqid from trimmed2_ch.combine( seq_ch )
 
 output:
 file('Aligned.bam') into align_ch
@@ -190,7 +193,7 @@ file('Aligned.bam') into align_ch
 script:
 """
 mini_align \
-  -i Chopped.fastq -r Refseq.fasta \
+  -i trimmed.fastq -r Refseq.fasta \
   -p Aligned \
   -t ${task.cpus}
 """
