@@ -10,8 +10,8 @@ params.evalue='0.1'
 params.outsuffix='results_'
 
 
-read_ch =     params.basecalled ? Channel.empty() : Channel.fromPath( params.read_dir ).map{ it -> [ it, it.parent, it.name ] }
-basefile_ch = params.basecalled ? Channel.fromPath( params.basecalled ).map{ it -> [ it, it.parent, it.name ] } : Channel.empty()
+read_ch =     params.basecalled ? Channel.empty() : Channel.fromPath( params.read_dir ).map{ it -> [ it.parent, it.name, it ] }
+basefile_ch = params.basecalled ? Channel.fromPath( params.basecalled ).map{ it -> [ it.parent, it.name, it ] } : Channel.empty()
 
 
 process basecall {
@@ -20,10 +20,10 @@ publishDir "${dir}/${params.outsuffix}${name}", mode: 'copy'
 stageInMode 'symlink'
 
 input:
-set file('read_dir'), dir, name from read_ch
+set val(dir), val(name), file('read_dir') from read_ch
 
 output:
-set file('params.outsuffix'), dir, name into base_ch
+set val(dir), val(name), file('params.outsuffix') into base_ch
 
 script:
 """
@@ -46,7 +46,7 @@ publishDir "${dir}/${params.outsuffix}${name}", mode: 'copy'
 stageInMode ( ( params.basecalled && workflow.profile == 'zeus' ) ? 'copy' : 'symlink' )
 
 input:
-set file('Basecalled.fastq'), val(dir), val(name) from base_ch.mix(basefile_ch)
+set val(dir), val(name), file('Basecalled.fastq') from base_ch.mix(basefile_ch)
 
 output:
  set val(dir), val(name), file('barcode??.fastq') into trimmedtmp_ch
@@ -75,7 +75,7 @@ input:
 set val(dir), val(name), val(bcID), file('demult.fastq') from trimmed_ch
 
 output:
-set file('Denovo_subset.fa'), dir, name // into denovo_ch,denovo2_ch
+set file('Denovo_subset.fa'), val(dir), val(name), val(bcID) into denovo_ch,denovo2_ch
 
 script:
 """
@@ -93,7 +93,6 @@ awk -v min_len_contig=${params.min_len_contig} \
 """
 }
 
-
 return
 
 
@@ -102,7 +101,7 @@ tag "${dir}/${name}"
 publishDir "${dir}/${params.outsuffix}${name}", mode: 'copy'
 
 input:
-set file('Denovo_subset.fa'), dir, name from denovo_ch
+set file('Denovo_subset.fa'), dir, name, bcID from denovo_ch
 
 output:
 set file('blast.tsv'), dir, name into blast_ch
