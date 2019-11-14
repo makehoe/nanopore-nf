@@ -46,10 +46,10 @@ publishDir "${dir}/${params.outsuffix}${name}", mode: 'copy'
 stageInMode ( ( params.basecalled && workflow.profile == 'zeus' ) ? 'copy' : 'symlink' )
 
 input:
-set file('Basecalled.fastq'), dir, name from base_ch.mix(basefile_ch)
+set file('Basecalled.fastq'), val(dir), val(name) from base_ch.mix(basefile_ch)
 
 output:
-set file('demultiplexed'), dir, name into trimmed_ch,trimmed2_ch
+ set val(dir), val(name), file('demultiplexed/barcode??.fastq') into trimmedtmp_ch
 
 script:
 """
@@ -59,16 +59,17 @@ qcat \
 """
 }
 
-return
+trimmedtmp_ch.transpose().into{trimmed_ch;trimmed2_ch}
 
-//trimmed_ch.view()
 
 process assemble{
 tag "${dir}/${name}"
 publishDir "${dir}/${params.outsuffix}${name}", mode: 'copy'
 
 input:
-set file('barcode$$.fastq'), dir, name from trimmed_ch
+
+set val(dir), val(name), file(fastq) from trimmed_ch
+
 
 output:
 set file('Denovo_subset.fa'), dir, name into denovo_ch,denovo2_ch
@@ -76,7 +77,7 @@ set file('Denovo_subset.fa'), dir, name into denovo_ch,denovo2_ch
 script:
 """
 mini_assemble \
-  -i demultiplex_trim.fastq -p denovo -o denovo \
+  -i  $fastq -p denovo -o denovo \
   -c -t ${task.cpus}
 
 awk -v min_len_contig=${params.min_len_contig} \
@@ -84,6 +85,7 @@ awk -v min_len_contig=${params.min_len_contig} \
   denovo/denovo_final.fa >Denovo_subset.fa
 """
 }
+
 
 
 process blast {
