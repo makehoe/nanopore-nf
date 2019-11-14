@@ -5,7 +5,7 @@ params.basecalled = ''
 params.diamond = false
 params.seqid=''
 
-params.min_len_contig='1000'
+params.min_len_contig='100'
 params.evalue='0.1'
 params.outsuffix='results_'
 
@@ -49,43 +49,52 @@ input:
 set file('Basecalled.fastq'), val(dir), val(name) from base_ch.mix(basefile_ch)
 
 output:
- set val(dir), val(name), file('demultiplexed/barcode??.fastq') into trimmedtmp_ch
+ set val(dir), val(name), file('barcode??.fastq') into trimmedtmp_ch
 
 script:
 """
 qcat \
-  -f Basecalled.fastq -b demultiplexed  \
+  -f Basecalled.fastq -b .  \
   --trim -t ${task.cpus}
 """
 }
 
-trimmedtmp_ch.transpose().into{trimmed_ch;trimmed2_ch}
+
+trimmedtmp_ch
+.transpose()
+.filter{ dir, val, file -> file.size() > 1.MB  }
+.map { dir, val, file -> tuple(dir,val, file.name[7..8], file) }
+.into{trimmed_ch;trimmed2_ch}
 
 
 process assemble{
-tag "${dir}/${name}"
-publishDir "${dir}/${params.outsuffix}${name}", mode: 'copy'
+tag "${dir}/${name}/${bcID}"
+publishDir "${dir}/${params.outsuffix}${name}/${bcID}", mode: 'copy'
 
 input:
-
-set val(dir), val(name), file(fastq) from trimmed_ch
-
+set val(dir), val(name), val(bcID), file('demult.fastq') from trimmed_ch
 
 output:
-set file('Denovo_subset.fa'), dir, name into denovo_ch,denovo2_ch
+set file('Denovo_subset.fa'), dir, name // into denovo_ch,denovo2_ch
 
 script:
 """
+
+
 mini_assemble \
-  -i  $fastq -p denovo -o denovo \
+  -i  demult.fastq -p denovo -o denovo \
   -c -t ${task.cpus}
 
+##cp denovo/denovo_final.fa Denovo_subset.fa
+
 awk -v min_len_contig=${params.min_len_contig} \
-  '{ if( substr(\$1,1,1) == ">" ){ skip=0 ; s=gensub(/LN:i:/,"",1,\$2) ; if( (s-0) < min_len_contig ){ skip=1 }} ; if( skip == 0 ){print} }' \
-  denovo/denovo_final.fa >Denovo_subset.fa
+ '{ if( substr(\$1,1,1) == ">" ){ skip=0 ; s=gensub(/LN:i:/,"",1,\$2) ; if( (s-0) < min_len_contig ){ skip=1 }} ; if( skip == 0 ){print} }' \
+ denovo/denovo_final.fa >Denovo_subset.fa
 """
 }
 
+
+return
 
 
 process blast {
