@@ -93,19 +93,17 @@ awk -v min_len_contig=${params.min_len_contig} \
 """
 }
 
-return
-
 
 process blast {
 tag "${dir}/${name}"
-publishDir "${dir}/${params.outsuffix}${name}", mode: 'copy'
+publishDir "${dir}/${params.outsuffix}${name}/${bcID}", mode: 'copy'
 
 input:
-set file('Denovo_subset.fa'), dir, name, bcID from denovo_ch
+set file('Denovo_subset.fa'), val(dir), val(name), val(bcID) from denovo_ch
 
 output:
-set file('blast.tsv'), dir, name into blast_ch
-set file('blast.xml'), dir, name into blast_xml_ch
+set file('blast.tsv'), dir, name, bcID into blast_ch
+set file('blast.xml'), dir, name, bcID into blast_xml_ch
 
 when:
 !params.diamond
@@ -133,7 +131,7 @@ sort -n -r -k 6 blast_unsort.tsv >blast.tsv
 
 process diamond {
 tag "${dir}/${name}"
-publishDir "${dir}/${params.outsuffix}${name}", mode: 'copy'
+publishDir "${dir}/${params.outsuffix}${name}/${bcID}", mode: 'copy'
 
 input:
 set file('Denovo_subset.fa'), dir, name from denovo2_ch
